@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Compare average monthly temperatures and rainfall between cities using interactive 3D visualizations. Explore high, low, and mean temperatures or precipitation across the year.">
+    <meta name="description" content="Compare average monthly temperatures, rainfall, and sunlight hours between cities using interactive 3D visualizations. Explore high, low, and mean temperatures, precipitation, or daily sunshine across the year.">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>">
     <title>City Weather Explorer - 3D Climate Comparison</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -682,6 +682,7 @@
                     <div class="toggle-group" id="dataTypeToggle">
                         <button class="toggle-btn active" data-value="temperature">Temperature</button>
                         <button class="toggle-btn" data-value="rainfall">Rainfall</button>
+                        <button class="toggle-btn" data-value="sunlight">Sunlight</button>
                     </div>
                 </div>
 
@@ -783,6 +784,11 @@
                             <div class="no-data-message" id="noDataRainfall">Select cities to compare</div>
                         </div>
                     </div>
+                    <div class="chart-card" id="sunlightCard">
+                        <div class="chart-wrapper" id="sunlightChartWrapper">
+                            <div class="no-data-message" id="noDataSunlight">Select cities to compare</div>
+                        </div>
+                    </div>
                     <div class="legend-container">
                         <div class="legend-item" id="legend1">
                             <div class="legend-color" style="background: #e67e22;"></div>
@@ -853,6 +859,9 @@
             if (dataType === 'rainfall') {
                 return 'rainfall';
             }
+            if (dataType === 'sunlight') {
+                return 'sunlight';
+            }
             if (tempType === 'actual') {
                 return tempMetric; // 'high', 'avg', or 'low'
             } else {
@@ -888,6 +897,9 @@
             if (dataType === 'rainfall') {
                 document.getElementById('unitLabel').textContent = 'mm';
                 document.getElementById('footerUnit').textContent = 'mm';
+            } else if (dataType === 'sunlight') {
+                document.getElementById('unitLabel').textContent = 'hrs';
+                document.getElementById('footerUnit').textContent = 'hours';
             } else {
                 const unit = useCelsius ? '°C' : '°F';
                 document.getElementById('unitLabel').textContent = unit;
@@ -945,9 +957,9 @@
                     btn.classList.toggle('active', btn.dataset.value === dataType);
                 });
                 const tempTypeSelector = document.getElementById('tempTypeSelector');
-                tempTypeSelector.style.display = dataType === 'rainfall' ? 'none' : 'block';
+                tempTypeSelector.style.display = dataType === 'temperature' ? 'block' : 'none';
                 const unitToggleContainer = document.getElementById('unitToggle').parentElement;
-                unitToggleContainer.style.display = dataType === 'rainfall' ? 'none' : 'flex';
+                unitToggleContainer.style.display = dataType === 'temperature' ? 'flex' : 'none';
             }
 
             if (params.has('tempType')) {
@@ -1091,9 +1103,9 @@
         const cameras = {};
         const renderers = {};
         const controls = {};
-        const CHART_TYPES = ['high', 'low', 'avg', 'feelsHigh', 'feelsLow', 'feelsAvg', 'rainfall'];
-        const cityMeshes = { high: [], low: [], avg: [], feelsHigh: [], feelsLow: [], feelsAvg: [], rainfall: [] };
-        const temperatureLabels = { high: [], low: [], avg: [], feelsHigh: [], feelsLow: [], feelsAvg: [], rainfall: [] };
+        const CHART_TYPES = ['high', 'low', 'avg', 'feelsHigh', 'feelsLow', 'feelsAvg', 'rainfall', 'sunlight'];
+        const cityMeshes = { high: [], low: [], avg: [], feelsHigh: [], feelsLow: [], feelsAvg: [], rainfall: [], sunlight: [] };
+        const temperatureLabels = { high: [], low: [], avg: [], feelsHigh: [], feelsLow: [], feelsAvg: [], rainfall: [], sunlight: [] };
 
         function switchChart(chartType) {
             // Hide all chart cards
@@ -1332,11 +1344,14 @@
             }
         }
 
-        function createTemperatureLabel(tempF, color, position, isRainfall = false) {
+        function createTemperatureLabel(tempF, color, position, dataTypeKey = 'temperature') {
             let displayValue, suffix;
-            if (isRainfall) {
+            if (dataTypeKey === 'rainfall') {
                 displayValue = tempF; // Already in mm
                 suffix = 'mm';
+            } else if (dataTypeKey === 'sunlight') {
+                displayValue = tempF; // Already in hours
+                suffix = 'h';
             } else {
                 displayValue = convertTemp(tempF);
                 suffix = '°';
@@ -1383,7 +1398,7 @@
             const radius = BASE_RADIUS + colorIndex * RADIUS_OFFSET;
             const range = maxVal - minVal || 1;
             const points = [];
-            const isRainfall = sceneKey === 'rainfall';
+            const dataTypeKey = sceneKey === 'rainfall' ? 'rainfall' : (sceneKey === 'sunlight' ? 'sunlight' : 'temperature');
 
             // Create points for the shape
             for (let i = 0; i < 12; i++) {
@@ -1410,8 +1425,8 @@
                 sphere.position.set(points[i].x, points[i].y, points[i].z);
                 group.add(sphere);
 
-                // Value label (temperature or rainfall)
-                const label = createTemperatureLabel(data[i], color.css, points[i], isRainfall);
+                // Value label (temperature, rainfall, or sunlight)
+                const label = createTemperatureLabel(data[i], color.css, points[i], dataTypeKey);
                 label.userData.monthIndex = i;
                 label.userData.basePosition = points[i].clone();
                 labels.push(label);
@@ -1457,6 +1472,7 @@
             document.getElementById('noDataFeelsLow').style.display = hasData ? 'none' : 'block';
             document.getElementById('noDataFeelsAvg').style.display = hasData ? 'none' : 'block';
             document.getElementById('noDataRainfall').style.display = hasData ? 'none' : 'block';
+            document.getElementById('noDataSunlight').style.display = hasData ? 'none' : 'block';
 
             // Update legend
             for (let i = 0; i < 3; i++) {
@@ -1654,7 +1670,7 @@
 
         // Cache functions
         const CACHE_PREFIX = 'weather_cache_';
-        const CACHE_VERSION = 'v3_'; // Updated to v3 for total monthly rainfall
+        const CACHE_VERSION = 'v4_'; // Updated to v4 for sunlight hours
 
         function getCacheKey(lat, lon, decade) {
             // Round coordinates to 2 decimal places to handle minor variations
@@ -1761,7 +1777,7 @@
             }
 
             const formatDate = d => d.toISOString().split('T')[0];
-            const url = `https://customer-archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,apparent_temperature_max,apparent_temperature_min,apparent_temperature_mean,precipitation_sum&timezone=auto&apikey=${API_KEY}`;
+            const url = `https://customer-archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,apparent_temperature_max,apparent_temperature_min,apparent_temperature_mean,precipitation_sum,sunshine_duration&timezone=auto&apikey=${API_KEY}`;
 
             try {
                 const data = await fetchWithRetry(url);
@@ -1782,7 +1798,8 @@
                 avg: Array(12).fill(null).map(() => []),
                 feelsHigh: Array(12).fill(null).map(() => []),
                 feelsLow: Array(12).fill(null).map(() => []),
-                feelsAvg: Array(12).fill(null).map(() => [])
+                feelsAvg: Array(12).fill(null).map(() => []),
+                sunlight: Array(12).fill(null).map(() => [])
             };
 
             // For rainfall, we need to track by year-month to sum monthly totals first
@@ -1796,6 +1813,7 @@
             const feelsLows = data.daily.apparent_temperature_min;
             const feelsAvgs = data.daily.apparent_temperature_mean;
             const precipitation = data.daily.precipitation_sum;
+            const sunshine = data.daily.sunshine_duration;
 
             for (let i = 0; i < dates.length; i++) {
                 const date = new Date(dates[i]);
@@ -1808,6 +1826,8 @@
                 if (feelsHighs[i] !== null) monthlyData.feelsHigh[month].push(feelsHighs[i]);
                 if (feelsLows[i] !== null) monthlyData.feelsLow[month].push(feelsLows[i]);
                 if (feelsAvgs[i] !== null) monthlyData.feelsAvg[month].push(feelsAvgs[i]);
+                // Sunlight: convert seconds to hours for daily average
+                if (sunshine && sunshine[i] !== null) monthlyData.sunlight[month].push(sunshine[i] / 3600);
 
                 // Sum rainfall by year-month
                 if (precipitation && precipitation[i] !== null) {
@@ -1833,7 +1853,8 @@
                 feelsHigh: monthlyData.feelsHigh.map(arr => toFahrenheit(average(arr))),
                 feelsLow: monthlyData.feelsLow.map(arr => toFahrenheit(average(arr))),
                 feelsAvg: monthlyData.feelsAvg.map(arr => toFahrenheit(average(arr))),
-                rainfall: monthlyRainfallTotals.map(arr => Math.round(average(arr))) // Average total monthly rainfall in mm
+                rainfall: monthlyRainfallTotals.map(arr => Math.round(average(arr))), // Average total monthly rainfall in mm
+                sunlight: monthlyData.sunlight.map(arr => Math.round(average(arr) * 10) / 10) // Average daily sunlight hours (1 decimal)
             };
         }
 
@@ -2025,7 +2046,7 @@
                 decadeSelect.addEventListener('change', () => onDecadeChange(i));
             }
 
-            // Data type toggle (Temperature/Rainfall)
+            // Data type toggle (Temperature/Rainfall/Sunlight)
             document.querySelectorAll('#dataTypeToggle .toggle-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     document.querySelectorAll('#dataTypeToggle .toggle-btn').forEach(b => b.classList.remove('active'));
@@ -2034,11 +2055,11 @@
 
                     // Show/hide temperature type selector based on data type
                     const tempTypeSelector = document.getElementById('tempTypeSelector');
-                    tempTypeSelector.style.display = dataType === 'rainfall' ? 'none' : 'block';
+                    tempTypeSelector.style.display = dataType === 'temperature' ? 'block' : 'none';
 
-                    // Show/hide unit toggle based on data type (no C/F conversion for rainfall)
+                    // Show/hide unit toggle based on data type (no C/F conversion for rainfall or sunlight)
                     const unitToggleContainer = document.getElementById('unitToggle').parentElement;
-                    unitToggleContainer.style.display = dataType === 'rainfall' ? 'none' : 'flex';
+                    unitToggleContainer.style.display = dataType === 'temperature' ? 'flex' : 'none';
 
                     // Update unit display
                     updateUnitDisplay();
