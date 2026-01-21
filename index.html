@@ -127,22 +127,46 @@
             color: var(--text-secondary);
         }
 
-        .chart-type-select {
-            width: 100%;
+        .toggle-group {
+            display: flex;
             background: var(--input-bg);
             border: 1px solid var(--border-light);
-            color: var(--text-primary);
-            padding: 10px 15px;
             border-radius: 8px;
-            font-size: 0.95rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
+            overflow: hidden;
         }
 
-        .chart-type-select:focus {
-            outline: none;
-            border-color: #27ae60;
-            box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.15);
+        .toggle-group + .toggle-group {
+            margin-top: 10px;
+        }
+
+        .toggle-btn {
+            flex: 1;
+            padding: 10px 8px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-right: 1px solid var(--border-light);
+        }
+
+        .toggle-btn:last-child {
+            border-right: none;
+        }
+
+        .toggle-btn:hover {
+            background: rgba(39, 174, 96, 0.1);
+            color: var(--text-primary);
+        }
+
+        .toggle-btn.active {
+            background: #27ae60;
+            color: #fff;
+        }
+
+        .toggle-btn.active:hover {
+            background: #219a52;
         }
 
         .controls {
@@ -339,6 +363,37 @@
             border-radius: 8px;
             margin-top: 8px;
             font-size: 0.85rem;
+        }
+
+        .decade-selector {
+            margin-top: 8px;
+        }
+
+        .decade-selector label {
+            display: block;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .decade-select {
+            width: 100%;
+            background: var(--input-bg);
+            border: 1px solid var(--border-light);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .decade-select:focus {
+            outline: none;
+            border-color: #27ae60;
+            box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.15);
         }
 
         .chart-container {
@@ -580,14 +635,15 @@
 
                 <div class="chart-type-selector">
                     <label>Temperature Type</label>
-                    <select class="chart-type-select" id="chartTypeSelect">
-                        <option value="high">Average High</option>
-                        <option value="avg">Average Mean</option>
-                        <option value="low">Average Low</option>
-                        <option value="feelsHigh">Feels Like High</option>
-                        <option value="feelsAvg">Feels Like Mean</option>
-                        <option value="feelsLow">Feels Like Low</option>
-                    </select>
+                    <div class="toggle-group" id="tempTypeToggle">
+                        <button class="toggle-btn active" data-value="actual">Average</button>
+                        <button class="toggle-btn" data-value="feels">Feels Like</button>
+                    </div>
+                    <div class="toggle-group" id="tempMetricToggle">
+                        <button class="toggle-btn active" data-value="high">High</button>
+                        <button class="toggle-btn" data-value="avg">Mean</button>
+                        <button class="toggle-btn" data-value="low">Low</button>
+                    </div>
                 </div>
 
                 <div class="controls">
@@ -596,6 +652,10 @@
                         <div class="search-container">
                             <input type="text" class="city-input" id="search1" placeholder="Search for a city..." autocomplete="off">
                             <div class="autocomplete-dropdown" id="dropdown1"></div>
+                        </div>
+                        <div class="decade-selector">
+                            <label>Decade</label>
+                            <select class="decade-select" id="decade1"></select>
                         </div>
                         <div id="selected1"></div>
                         <div id="loading1"></div>
@@ -607,6 +667,10 @@
                             <input type="text" class="city-input" id="search2" placeholder="Search for a city..." autocomplete="off">
                             <div class="autocomplete-dropdown" id="dropdown2"></div>
                         </div>
+                        <div class="decade-selector">
+                            <label>Decade</label>
+                            <select class="decade-select" id="decade2"></select>
+                        </div>
                         <div id="selected2"></div>
                         <div id="loading2"></div>
                         <div id="error2"></div>
@@ -616,6 +680,10 @@
                         <div class="search-container">
                             <input type="text" class="city-input" id="search3" placeholder="Search for a city..." autocomplete="off">
                             <div class="autocomplete-dropdown" id="dropdown3"></div>
+                        </div>
+                        <div class="decade-selector">
+                            <label>Decade</label>
+                            <select class="decade-select" id="decade3"></select>
                         </div>
                         <div id="selected3"></div>
                         <div id="loading3"></div>
@@ -695,13 +763,48 @@
         const MIN_HEIGHT = 1.0;
         const MAX_HEIGHT = 5.0;
 
+        // Generate decades from 1940s to current decade
+        const DECADES = (() => {
+            const currentYear = new Date().getFullYear();
+            const currentDecade = Math.floor(currentYear / 10) * 10;
+            const decades = [];
+            for (let year = 1940; year <= currentDecade; year += 10) {
+                decades.push({
+                    value: year,
+                    label: `${year}s`,
+                    startYear: year,
+                    endYear: Math.min(year + 9, currentYear)
+                });
+            }
+            return decades.reverse(); // Most recent first
+        })();
+
         // State
         const selectedCities = [null, null, null];
+        const selectedDecades = [DECADES[0].value, DECADES[0].value, DECADES[0].value]; // Default to current decade
         let searchTimeouts = [null, null, null];
         let isDarkMode = false;
         let useCelsius = false;
         let hoveredCityIndex = -1;
         let isSyncing = false;
+        let tempType = 'actual'; // 'actual' or 'feels'
+        let tempMetric = 'high'; // 'high', 'avg', or 'low'
+
+        // Get chart type key from current selections
+        function getChartTypeKey() {
+            if (tempType === 'actual') {
+                return tempMetric; // 'high', 'avg', or 'low'
+            } else {
+                // 'feels' + capitalize metric
+                const capitalized = tempMetric.charAt(0).toUpperCase() + tempMetric.slice(1);
+                return 'feels' + capitalized; // 'feelsHigh', 'feelsAvg', or 'feelsLow'
+            }
+        }
+
+        function updateTempTypeToggle() {
+            const chartType = getChartTypeKey();
+            switchChart(chartType);
+        }
 
         function toggleTheme() {
             isDarkMode = !isDarkMode;
@@ -1118,8 +1221,10 @@
                 const legendItem = document.getElementById(`legend${i + 1}`);
                 const legendText = document.getElementById(`legendText${i + 1}`);
                 if (selectedCities[i]) {
+                    const city = selectedCities[i];
+                    const decadeLabel = city.decade ? ` (${city.decade}s)` : '';
                     legendItem.classList.add('visible');
-                    legendText.textContent = selectedCities[i].name;
+                    legendText.textContent = city.name + decadeLabel;
                 } else {
                     legendItem.classList.remove('visible');
                 }
@@ -1302,11 +1407,23 @@
             }
         }
 
-        async function fetchTemperatureData(lat, lon) {
-            const endDate = new Date();
-            endDate.setDate(endDate.getDate() - 7);
-            const startDate = new Date(endDate);
-            startDate.setFullYear(startDate.getFullYear() - 10);
+        async function fetchTemperatureData(lat, lon, decadeStartYear) {
+            // Find the decade info
+            const decade = DECADES.find(d => d.value === decadeStartYear) || DECADES[0];
+            const currentYear = new Date().getFullYear();
+
+            // For current decade, end 7 days ago; for past decades, use full decade
+            let startDate, endDate;
+            if (decade.endYear >= currentYear) {
+                // Current decade - end 7 days before today
+                endDate = new Date();
+                endDate.setDate(endDate.getDate() - 7);
+                startDate = new Date(decade.startYear, 0, 1);
+            } else {
+                // Past decade - use full decade range
+                startDate = new Date(decade.startYear, 0, 1);
+                endDate = new Date(decade.endYear, 11, 31);
+            }
 
             const formatDate = d => d.toISOString().split('T')[0];
             const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,apparent_temperature_max,apparent_temperature_min,apparent_temperature_mean&timezone=auto`;
@@ -1425,20 +1542,24 @@
             const selectedDiv = document.getElementById(`selected${index + 1}`);
             const loadingDiv = document.getElementById(`loading${index + 1}`);
             const errorDiv = document.getElementById(`error${index + 1}`);
+            const decade = selectedDecades[index];
 
             dropdown.classList.remove('show');
             input.value = '';
             errorDiv.innerHTML = '';
 
-            loadingDiv.innerHTML = `<div class="loading-indicator"><div class="spinner"></div>Loading temperature data...</div>`;
+            loadingDiv.innerHTML = `<div class="loading-indicator"><div class="spinner"></div>Loading ${decade}s data...</div>`;
 
             try {
-                const tempData = await fetchTemperatureData(city.latitude, city.longitude);
+                const tempData = await fetchTemperatureData(city.latitude, city.longitude, decade);
 
                 selectedCities[index] = {
                     name: city.name,
                     country: city.country,
                     admin1: city.admin1,
+                    latitude: city.latitude,
+                    longitude: city.longitude,
+                    decade: decade,
                     ...tempData
                 };
 
@@ -1449,6 +1570,40 @@
             } catch (error) {
                 loadingDiv.innerHTML = '';
                 errorDiv.innerHTML = `<div class="error-message">Failed to load data. Please try again.</div>`;
+            }
+        }
+
+        async function onDecadeChange(index) {
+            const decadeSelect = document.getElementById(`decade${index + 1}`);
+            const newDecade = parseInt(decadeSelect.value, 10);
+            selectedDecades[index] = newDecade;
+
+            // If a city is already selected, refetch data for the new decade
+            const city = selectedCities[index];
+            if (city) {
+                const loadingDiv = document.getElementById(`loading${index + 1}`);
+                const errorDiv = document.getElementById(`error${index + 1}`);
+                errorDiv.innerHTML = '';
+
+                loadingDiv.innerHTML = `<div class="loading-indicator"><div class="spinner"></div>Loading ${newDecade}s data...</div>`;
+
+                try {
+                    const tempData = await fetchTemperatureData(city.latitude, city.longitude, newDecade);
+
+                    selectedCities[index] = {
+                        ...city,
+                        decade: newDecade,
+                        ...tempData
+                    };
+
+                    loadingDiv.innerHTML = '';
+                    renderSelectedCity(index);
+                    updateCharts();
+
+                } catch (error) {
+                    loadingDiv.innerHTML = '';
+                    errorDiv.innerHTML = `<div class="error-message">Failed to load data. Please try again.</div>`;
+                }
             }
         }
 
@@ -1463,11 +1618,12 @@
 
             const colorClass = index === 0 ? '' : `color-${index + 1}`;
             const location = [city.admin1, city.country].filter(Boolean).join(', ');
+            const decadeLabel = city.decade ? `(${city.decade}s)` : '';
 
             selectedDiv.innerHTML = `
                 <div class="selected-city ${colorClass}">
                     <div class="city-info">
-                        <span class="name">${city.name}</span>
+                        <span class="name">${city.name} ${decadeLabel}</span>
                         <span class="country">${location}</span>
                     </div>
                     <button class="remove-btn" onclick="removeCity(${index})">&times;</button>
@@ -1496,9 +1652,38 @@
             setupSearchInput(1);
             setupSearchInput(2);
 
-            // Chart type dropdown
-            document.getElementById('chartTypeSelect').addEventListener('change', (e) => {
-                switchChart(e.target.value);
+            // Initialize decade dropdowns
+            for (let i = 0; i < 3; i++) {
+                const decadeSelect = document.getElementById(`decade${i + 1}`);
+                DECADES.forEach(decade => {
+                    const option = document.createElement('option');
+                    option.value = decade.value;
+                    option.textContent = decade.label;
+                    if (decade.value === selectedDecades[i]) {
+                        option.selected = true;
+                    }
+                    decadeSelect.appendChild(option);
+                });
+                decadeSelect.addEventListener('change', () => onDecadeChange(i));
+            }
+
+            // Temperature type toggles
+            document.querySelectorAll('#tempTypeToggle .toggle-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('#tempTypeToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    tempType = btn.dataset.value;
+                    updateTempTypeToggle();
+                });
+            });
+
+            document.querySelectorAll('#tempMetricToggle .toggle-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('#tempMetricToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    tempMetric = btn.dataset.value;
+                    updateTempTypeToggle();
+                });
             });
 
             // Theme toggle
