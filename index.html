@@ -1,0 +1,1505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>">
+    <title>City Temperature Comparison - 3D</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #f8f9fa;
+            --bg-secondary: #ffffff;
+            --bg-chart: linear-gradient(180deg, #f0f4f8 0%, #e8eef3 100%);
+            --text-primary: #2d3436;
+            --text-secondary: #636e72;
+            --text-muted: #888;
+            --border-color: #e0e0e0;
+            --border-light: #ddd;
+            --input-bg: #f8f9fa;
+            --shadow: rgba(0, 0, 0, 0.06);
+            --shadow-strong: rgba(0, 0, 0, 0.1);
+            --legend-bg: rgba(255, 255, 255, 0.9);
+            --legend-border: rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-chart: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
+            --text-primary: #eaeaea;
+            --text-secondary: #a0a0a0;
+            --text-muted: #707070;
+            --border-color: #2a2a4a;
+            --border-light: #3a3a5a;
+            --input-bg: #0f0f1a;
+            --shadow: rgba(0, 0, 0, 0.3);
+            --shadow-strong: rgba(0, 0, 0, 0.4);
+            --legend-bg: rgba(22, 33, 62, 0.9);
+            --legend-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-primary);
+            min-height: 100vh;
+            color: var(--text-primary);
+            overflow-x: hidden;
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 300;
+            letter-spacing: 2px;
+            margin-bottom: 5px;
+            background: linear-gradient(90deg, #e67e22, #27ae60, #9b59b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+        }
+
+        .main-layout {
+            display: flex;
+            gap: 30px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .left-panel {
+            width: 280px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .chart-type-selector {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px 15px;
+            box-shadow: 0 2px 8px var(--shadow);
+            transition: background 0.3s ease, border-color 0.3s ease;
+        }
+
+        .chart-type-selector label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+        }
+
+        .chart-type-select {
+            width: 100%;
+            background: var(--input-bg);
+            border: 1px solid var(--border-light);
+            color: var(--text-primary);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .chart-type-select:focus {
+            outline: none;
+            border-color: #27ae60;
+            box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.15);
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: relative;
+            z-index: 100;
+        }
+
+        .city-selector {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px 15px;
+            box-shadow: 0 2px 8px var(--shadow);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .city-selector:hover {
+            border-color: var(--border-light);
+            box-shadow: 0 4px 12px var(--shadow-strong);
+        }
+
+        .city-selector label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+        }
+
+        .color-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        .search-container {
+            position: relative;
+        }
+
+        .city-input {
+            width: 100%;
+            background: var(--input-bg);
+            border: 1px solid var(--border-light);
+            color: var(--text-primary);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+        }
+
+        .city-input:focus {
+            outline: none;
+            border-color: #27ae60;
+            box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.15);
+        }
+
+        .city-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .autocomplete-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-top: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 12px var(--shadow-strong);
+        }
+
+        .autocomplete-dropdown.show {
+            display: block;
+        }
+
+        .autocomplete-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-color);
+            transition: background 0.2s ease;
+        }
+
+        .autocomplete-item:hover {
+            background: rgba(39, 174, 96, 0.15);
+        }
+
+        .autocomplete-item:last-child {
+            border-bottom: none;
+        }
+
+        .autocomplete-item .city-name {
+            font-weight: 500;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+        }
+
+        .autocomplete-item .city-details {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .selected-city {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(230, 126, 34, 0.1);
+            border: 1px solid rgba(230, 126, 34, 0.4);
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-top: 8px;
+        }
+
+        .selected-city.color-2 {
+            background: rgba(39, 174, 96, 0.1);
+            border-color: rgba(39, 174, 96, 0.4);
+        }
+
+        .selected-city.color-3 {
+            background: rgba(155, 89, 182, 0.1);
+            border-color: rgba(155, 89, 182, 0.4);
+        }
+
+        .selected-city .city-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .selected-city .city-info .name {
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .selected-city .city-info .country {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .selected-city .remove-btn {
+            background: none;
+            border: none;
+            color: #e74c3c;
+            font-size: 1.1rem;
+            cursor: pointer;
+            padding: 5px;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        .selected-city .remove-btn:hover {
+            opacity: 1;
+        }
+
+        .loading-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid var(--border-color);
+            border-top-color: #27ae60;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: rgba(231, 76, 60, 0.1);
+            border: 1px solid rgba(231, 76, 60, 0.3);
+            color: #e74c3c;
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-top: 8px;
+            font-size: 0.85rem;
+        }
+
+        .chart-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .chart-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 2px 8px var(--shadow);
+            flex: 1;
+            display: none;
+            flex-direction: column;
+            transition: background 0.3s ease, border-color 0.3s ease;
+        }
+
+        .chart-card.active {
+            display: flex;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            flex: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--bg-chart);
+            min-height: 400px;
+        }
+
+        .legend-container {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: row;
+            gap: 12px;
+            z-index: 10;
+        }
+
+        .legend-item {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            background: var(--legend-bg);
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--legend-border);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .legend-item:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .legend-item.visible {
+            display: flex;
+        }
+
+        .legend-color {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+        }
+
+        .legend-text {
+            font-size: 0.8rem;
+            color: var(--text-primary);
+        }
+
+        .chart-wrapper canvas {
+            display: block;
+        }
+
+        .no-data-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--text-muted);
+            font-size: 1rem;
+            text-align: center;
+        }
+
+        .instructions {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            margin-top: 10px;
+        }
+
+        /* Toggles */
+        .toggle-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px 15px;
+            box-shadow: 0 2px 8px var(--shadow);
+            transition: background 0.3s ease, border-color 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .theme-toggle span {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 26px;
+            background: var(--border-color);
+            border-radius: 13px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 20px;
+            height: 20px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .toggle-switch.active {
+            background: #27ae60;
+        }
+
+        .toggle-switch.active::after {
+            transform: translateX(24px);
+        }
+
+        footer {
+            text-align: center;
+            padding: 15px;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        footer a {
+            color: #27ae60;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 900px) {
+            .main-layout {
+                flex-direction: column;
+            }
+
+            .left-panel {
+                width: 100%;
+                flex-direction: row;
+                flex-wrap: wrap;
+            }
+
+            .controls {
+                flex-direction: row;
+                flex-wrap: wrap;
+                flex: 1;
+            }
+
+            .city-selector {
+                flex: 1;
+                min-width: 200px;
+            }
+
+            .chart-type-selector {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.4rem;
+            }
+
+            .left-panel {
+                flex-direction: column;
+            }
+
+            .controls {
+                flex-direction: column;
+            }
+
+            .city-selector {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>City Temperature Explorer</h1>
+            <p class="subtitle">3D comparison of monthly temperature patterns</p>
+        </header>
+
+        <div class="main-layout">
+            <div class="left-panel">
+                <div class="toggle-row">
+                    <div class="theme-toggle">
+                        <span>Dark Mode</span>
+                        <div class="toggle-switch" id="themeToggle"></div>
+                    </div>
+                    <div class="theme-toggle">
+                        <span id="unitLabel">°F</span>
+                        <div class="toggle-switch" id="unitToggle"></div>
+                    </div>
+                </div>
+
+                <div class="chart-type-selector">
+                    <label>Temperature Type</label>
+                    <select class="chart-type-select" id="chartTypeSelect">
+                        <option value="high">Average High</option>
+                        <option value="avg">Average Mean</option>
+                        <option value="low">Average Low</option>
+                    </select>
+                </div>
+
+                <div class="controls">
+                    <div class="city-selector">
+                        <label><span class="color-indicator" style="background: #e67e22;"></span>City 1</label>
+                        <div class="search-container">
+                            <input type="text" class="city-input" id="search1" placeholder="Search for a city..." autocomplete="off">
+                            <div class="autocomplete-dropdown" id="dropdown1"></div>
+                        </div>
+                        <div id="selected1"></div>
+                        <div id="loading1"></div>
+                        <div id="error1"></div>
+                    </div>
+                    <div class="city-selector">
+                        <label><span class="color-indicator" style="background: #27ae60;"></span>City 2</label>
+                        <div class="search-container">
+                            <input type="text" class="city-input" id="search2" placeholder="Search for a city..." autocomplete="off">
+                            <div class="autocomplete-dropdown" id="dropdown2"></div>
+                        </div>
+                        <div id="selected2"></div>
+                        <div id="loading2"></div>
+                        <div id="error2"></div>
+                    </div>
+                    <div class="city-selector">
+                        <label><span class="color-indicator" style="background: #9b59b6;"></span>City 3</label>
+                        <div class="search-container">
+                            <input type="text" class="city-input" id="search3" placeholder="Search for a city..." autocomplete="off">
+                            <div class="autocomplete-dropdown" id="dropdown3"></div>
+                        </div>
+                        <div id="selected3"></div>
+                        <div id="loading3"></div>
+                        <div id="error3"></div>
+                    </div>
+                </div>
+
+                <p class="instructions">Drag to rotate the 3D plot</p>
+            </div>
+
+            <div class="right-panel">
+                <div class="chart-container">
+                    <div class="chart-card active" id="highCard">
+                        <div class="chart-wrapper" id="highChartWrapper">
+                            <div class="no-data-message" id="noDataHigh">Select cities to compare</div>
+                        </div>
+                    </div>
+                    <div class="chart-card" id="avgCard">
+                        <div class="chart-wrapper" id="avgChartWrapper">
+                            <div class="no-data-message" id="noDataAvg">Select cities to compare</div>
+                        </div>
+                    </div>
+                    <div class="chart-card" id="lowCard">
+                        <div class="chart-wrapper" id="lowChartWrapper">
+                            <div class="no-data-message" id="noDataLow">Select cities to compare</div>
+                        </div>
+                    </div>
+                    <div class="legend-container">
+                        <div class="legend-item" id="legend1">
+                            <div class="legend-color" style="background: #e67e22;"></div>
+                            <span class="legend-text" id="legendText1">City 1</span>
+                        </div>
+                        <div class="legend-item" id="legend2">
+                            <div class="legend-color" style="background: #27ae60;"></div>
+                            <span class="legend-text" id="legendText2">City 2</span>
+                        </div>
+                        <div class="legend-item" id="legend3">
+                            <div class="legend-color" style="background: #9b59b6;"></div>
+                            <span class="legend-text" id="legendText3">City 3</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Temperature data from <a href="https://open-meteo.com/" target="_blank">Open-Meteo API</a> | Heights represent <span id="footerUnit">°F</span></p>
+        </footer>
+    </div>
+
+    <script>
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const colors = [
+            { hex: 0xe67e22, css: '#e67e22' },  // Orange
+            { hex: 0x27ae60, css: '#27ae60' },  // Green
+            { hex: 0x9b59b6, css: '#9b59b6' }   // Purple
+        ];
+
+        const selectedCities = [null, null, null];
+        let searchTimeouts = [null, null, null];
+        let activeChart = 'high';
+        let isDarkMode = false;
+        let useCelsius = false;
+
+        function toggleTheme() {
+            isDarkMode = !isDarkMode;
+            document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
+            localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+            document.getElementById('themeToggle').classList.toggle('active', isDarkMode);
+            updateSceneColors();
+        }
+
+        function loadTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') {
+                isDarkMode = true;
+                document.documentElement.setAttribute('data-theme', 'dark');
+                document.getElementById('themeToggle').classList.add('active');
+            }
+        }
+
+        function updateUnitDisplay() {
+            const unit = useCelsius ? '°C' : '°F';
+            document.getElementById('unitLabel').textContent = unit;
+            document.getElementById('footerUnit').textContent = unit;
+            document.getElementById('unitToggle').classList.toggle('active', useCelsius);
+        }
+
+        function toggleUnit() {
+            useCelsius = !useCelsius;
+            localStorage.setItem('unit', useCelsius ? 'celsius' : 'fahrenheit');
+            updateUnitDisplay();
+            // Rebuild charts with new unit
+            updateCharts();
+        }
+
+        function loadUnit() {
+            const savedUnit = localStorage.getItem('unit');
+            if (savedUnit === 'celsius') {
+                useCelsius = true;
+                updateUnitDisplay();
+            }
+        }
+
+        function convertTemp(fahrenheit) {
+            if (useCelsius) {
+                return Math.round((fahrenheit - 32) * 5 / 9);
+            }
+            return fahrenheit;
+        }
+
+        // Three.js scenes
+        const scenes = {};
+        const cameras = {};
+        const renderers = {};
+        const controls = {};
+        const cityMeshes = { high: [], low: [], avg: [] };
+        const temperatureLabels = { high: [], low: [], avg: [] }; // Store label sprites for fading
+        let isSyncing = false; // Prevent infinite sync loops
+
+        // Hover interaction
+        let hoveredCityIndex = -1; // -1 means no hover, 0/1/2 = city index
+        const FADE_SPEED = 0.15; // Opacity change per frame (0-1)
+
+        function switchChart(chartType) {
+            activeChart = chartType;
+
+            // Hide all chart cards
+            document.getElementById('highCard').classList.remove('active');
+            document.getElementById('avgCard').classList.remove('active');
+            document.getElementById('lowCard').classList.remove('active');
+
+            // Show selected chart card
+            document.getElementById(`${chartType}Card`).classList.add('active');
+
+            // Trigger resize to ensure canvas fills container
+            setTimeout(() => handleResize(), 10);
+        }
+
+        function init3DScene(containerId, sceneKey) {
+            const container = document.getElementById(containerId);
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            // Scene
+            const scene = new THREE.Scene();
+            scenes[sceneKey] = scene;
+
+            // Camera - positioned to see full object with focus point lower
+            const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+            camera.position.set(9, 5, 9);
+            cameras[sceneKey] = camera;
+
+            // Renderer
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+            renderers[sceneKey] = renderer;
+
+            // Controls - only horizontal rotation (carousel spin)
+            const orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
+            orbitControls.target.set(0, 2, 0);
+            orbitControls.enableDamping = true;
+            orbitControls.dampingFactor = 0.05;
+            orbitControls.enablePan = false;
+            orbitControls.enableZoom = false;
+            orbitControls.minPolarAngle = Math.PI / 2.5;
+            orbitControls.maxPolarAngle = Math.PI / 2.5;
+            orbitControls.update();
+            controls[sceneKey] = orbitControls;
+
+            // Sync rotation with other charts
+            orbitControls.addEventListener('change', () => {
+                if (isSyncing) return;
+                isSyncing = true;
+                syncRotation(sceneKey);
+                isSyncing = false;
+            });
+
+
+            // Soft, diffuse lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.4);
+            directionalLight.position.set(5, 10, 5);
+            scene.add(directionalLight);
+
+            const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.3);
+            directionalLight2.position.set(-5, 8, -5);
+            scene.add(directionalLight2);
+
+            const directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.2);
+            directionalLight3.position.set(0, -5, 0);
+            scene.add(directionalLight3);
+
+            // Base platform
+            createBasePlatform(scene);
+
+            // Month labels
+            createMonthLabels(scene);
+        }
+
+        function syncRotation(sourceKey) {
+            const sourceCamera = cameras[sourceKey];
+            const sourceControls = controls[sourceKey];
+            if (!sourceCamera || !sourceControls) return;
+
+            const keys = ['high', 'low', 'avg'].filter(k => k !== sourceKey);
+
+            keys.forEach(key => {
+                if (cameras[key] && controls[key]) {
+                    // Copy camera position (maintains the same viewing angle)
+                    cameras[key].position.copy(sourceCamera.position);
+                    controls[key].update();
+                }
+            });
+        }
+
+        function updateSceneColors() {
+            // Update renderer clear color and rebuild base platforms
+            ['high', 'low', 'avg'].forEach(key => {
+                if (scenes[key]) {
+                    // Remove old base platform elements (wedges, lines, ring, month labels)
+                    const toRemove = [];
+                    scenes[key].children.forEach(child => {
+                        if (child.type === 'Mesh' || child.type === 'Line' || child.type === 'Sprite') {
+                            // Keep city data meshes (they're in groups)
+                            if (child.type !== 'Group') {
+                                toRemove.push(child);
+                            }
+                        }
+                    });
+                    toRemove.forEach(obj => scenes[key].remove(obj));
+
+                    // Rebuild base platform and labels with new colors
+                    createBasePlatform(scenes[key]);
+                    createMonthLabels(scenes[key]);
+                }
+            });
+        }
+
+        function createBasePlatform(scene) {
+            // Relative sunlight hours by month (northern hemisphere)
+            // 0 = least sunlight (dark), 1 = most sunlight (light)
+            const sunlight = [
+                0.15,  // Jan
+                0.25,  // Feb
+                0.45,  // Mar
+                0.65,  // Apr
+                0.85,  // May
+                1.0,   // Jun
+                0.95,  // Jul
+                0.80,  // Aug
+                0.55,  // Sep
+                0.35,  // Oct
+                0.20,  // Nov
+                0.10   // Dec
+            ];
+
+            const radius = 4;
+
+            // Create 12 wedge segments with gradient based on theme
+            for (let i = 0; i < 12; i++) {
+                const angle1 = (i / 12) * Math.PI * 2 - Math.PI / 2;
+                const angle2 = ((i + 1) / 12) * Math.PI * 2 - Math.PI / 2;
+
+                // Create wedge using vertices directly in world XZ plane
+                const geometry = new THREE.BufferGeometry();
+                const segments = 12;
+                const vertices = [0, 0.01, 0]; // center point
+
+                for (let j = 0; j <= segments; j++) {
+                    const a = angle1 + (angle2 - angle1) * (j / segments);
+                    vertices.push(Math.sin(a) * radius, 0.01, Math.cos(a) * radius);
+                }
+
+                const indices = [];
+                for (let j = 0; j < segments; j++) {
+                    indices.push(0, j + 1, j + 2);
+                }
+
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                geometry.setIndex(indices);
+
+                // Theme-aware gradient
+                let brightness;
+                if (isDarkMode) {
+                    // Dark mode: darker base with subtle variation
+                    brightness = Math.round(30 + sunlight[i] * 40);
+                } else {
+                    // Light mode: white for most sunlight, darker gray for least
+                    brightness = Math.round(180 + sunlight[i] * 70);
+                }
+                const color = (brightness << 16) + (brightness << 8) + brightness;
+
+                const material = new THREE.MeshBasicMaterial({
+                    color: color,
+                    side: THREE.DoubleSide
+                });
+
+                const wedge = new THREE.Mesh(geometry, material);
+                scene.add(wedge);
+            }
+
+            // Draw lines from center to each month
+            const lineColor = isDarkMode ? 0x555555 : 0x999999;
+            for (let i = 0; i < 12; i++) {
+                const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
+                const x = Math.sin(angle) * radius;
+                const z = Math.cos(angle) * radius;
+
+                const points = [
+                    new THREE.Vector3(0, 0.02, 0),
+                    new THREE.Vector3(x, 0.02, z)
+                ];
+                const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+                const lineMaterial = new THREE.LineBasicMaterial({
+                    color: lineColor,
+                    transparent: true,
+                    opacity: 0.6
+                });
+                const line = new THREE.Line(lineGeometry, lineMaterial);
+                scene.add(line);
+            }
+
+            // Subtle outer ring
+            const ringGeometry = new THREE.RingGeometry(3.95, 4, 64);
+            const ringMaterial = new THREE.MeshBasicMaterial({
+                color: isDarkMode ? 0x444444 : 0x888888,
+                transparent: true,
+                opacity: 0.5,
+                side: THREE.DoubleSide
+            });
+            const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.y = 0.02;
+            scene.add(ring);
+        }
+
+        function createMonthLabels(scene) {
+            for (let i = 0; i < 12; i++) {
+                const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
+                const radius = 4.3;
+                const x = Math.sin(angle) * radius;
+                const z = Math.cos(angle) * radius;
+
+                const canvas = document.createElement('canvas');
+                canvas.width = 100;
+                canvas.height = 50;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = isDarkMode ? '#aaaaaa' : '#555555';
+                ctx.font = 'bold 28px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(months[i], 50, 25);
+
+                const texture = new THREE.CanvasTexture(canvas);
+                const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+                const sprite = new THREE.Sprite(spriteMaterial);
+                sprite.position.set(x, 0.15, z);
+                sprite.scale.set(1, 0.5, 1);
+                scene.add(sprite);
+            }
+        }
+
+        function createTemperatureLabel(tempF, color, position) {
+            const displayTemp = convertTemp(tempF);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 96;
+            canvas.height = 48;
+            const ctx = canvas.getContext('2d');
+
+            // Background pill - theme aware
+            ctx.fillStyle = isDarkMode ? 'rgba(22, 33, 62, 0.9)' : 'rgba(255, 255, 255, 0.9)';
+            ctx.beginPath();
+            ctx.roundRect(8, 8, 80, 32, 12);
+            ctx.fill();
+            ctx.strokeStyle = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Text
+            ctx.fillStyle = color;
+            ctx.font = 'bold 22px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${displayTemp}°`, 48, 24);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({
+                map: texture,
+                transparent: true,
+                depthWrite: false,
+                depthTest: false
+            });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.renderOrder = 999; // Ensure labels render last
+            sprite.position.copy(position);
+            sprite.position.y += 0.5;
+            sprite.scale.set(0.8, 0.4, 1);
+            return sprite;
+        }
+
+        function create3DRadarShape(scene, data, colorIndex, sceneKey, minVal, maxVal) {
+            const color = colors[colorIndex];
+            const points = [];
+            // Offset each city's radius so bars don't overlap
+            const baseRadius = 3.2;
+            const radiusOffset = colorIndex * 0.35;
+            const radius = baseRadius + radiusOffset;
+
+            // Normalized height: map min->max to minHeight->maxHeight
+            const minHeight = 1.0;
+            const maxHeight = 5.0;
+            const range = maxVal - minVal || 1; // avoid division by zero
+
+            // Create points for the shape
+            for (let i = 0; i < 12; i++) {
+                const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
+                const x = Math.sin(angle) * radius;
+                const z = Math.cos(angle) * radius;
+                // Normalize height based on min/max across all cities in this chart
+                const normalized = (data[i] - minVal) / range;
+                const y = minHeight + normalized * (maxHeight - minHeight);
+                points.push(new THREE.Vector3(x, y, z));
+            }
+
+            const group = new THREE.Group();
+            const labels = [];
+
+            // Spheres and labels at each month - soft matte style
+            for (let i = 0; i < 12; i++) {
+                const sphereGeometry = new THREE.SphereGeometry(0.16, 24, 24);
+                const sphereMaterial = new THREE.MeshLambertMaterial({
+                    color: color.hex,
+                    transparent: true,
+                    opacity: 0.85
+                });
+                const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                sphere.position.set(points[i].x, points[i].y, points[i].z);
+                group.add(sphere);
+
+                // Temperature label
+                const label = createTemperatureLabel(data[i], color.css, points[i]);
+                label.userData.monthIndex = i;
+                label.userData.basePosition = points[i].clone();
+                labels.push(label);
+                group.add(label);
+            }
+
+            // Store labels for this city in the scene
+            temperatureLabels[sceneKey].push(...labels);
+
+            // Connect with a smooth, soft tube
+            const curvePoints = [...points, points[0]];
+            const curve = new THREE.CatmullRomCurve3(curvePoints);
+            const tubeGeometry = new THREE.TubeGeometry(curve, 72, 0.06, 12, true);
+            const tubeMaterial = new THREE.MeshLambertMaterial({
+                color: color.hex,
+                transparent: true,
+                opacity: 0.75
+            });
+            const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
+            group.add(tube);
+
+            scene.add(group);
+            return group;
+        }
+
+        function clearCityMeshes(sceneKey) {
+            cityMeshes[sceneKey].forEach(mesh => {
+                scenes[sceneKey].remove(mesh);
+            });
+            cityMeshes[sceneKey] = [];
+            temperatureLabels[sceneKey] = [];
+        }
+
+        function updateCharts() {
+            const activeCities = selectedCities.filter(c => c !== null);
+            const hasData = activeCities.length > 0;
+
+            // Toggle no-data messages
+            document.getElementById('noDataHigh').style.display = hasData ? 'none' : 'block';
+            document.getElementById('noDataLow').style.display = hasData ? 'none' : 'block';
+            document.getElementById('noDataAvg').style.display = hasData ? 'none' : 'block';
+
+            // Update legend
+            for (let i = 0; i < 3; i++) {
+                const legendItem = document.getElementById(`legend${i + 1}`);
+                const legendText = document.getElementById(`legendText${i + 1}`);
+                if (selectedCities[i]) {
+                    legendItem.classList.add('visible');
+                    legendText.textContent = selectedCities[i].name;
+                } else {
+                    legendItem.classList.remove('visible');
+                }
+            }
+
+            // Clear existing meshes
+            ['high', 'low', 'avg'].forEach(key => clearCityMeshes(key));
+
+            // Calculate min/max for each chart type across all selected cities
+            const getMinMax = (key) => {
+                const allValues = activeCities.flatMap(city => city[key]);
+                return {
+                    min: Math.min(...allValues),
+                    max: Math.max(...allValues)
+                };
+            };
+
+            const highRange = activeCities.length ? getMinMax('high') : { min: 0, max: 100 };
+            const lowRange = activeCities.length ? getMinMax('low') : { min: 0, max: 100 };
+            const avgRange = activeCities.length ? getMinMax('avg') : { min: 0, max: 100 };
+
+            // Add new city data with normalized heights
+            selectedCities.forEach((city, i) => {
+                if (!city) return;
+
+                const highMesh = create3DRadarShape(scenes.high, city.high, i, 'high', highRange.min, highRange.max);
+                cityMeshes.high.push(highMesh);
+
+                const lowMesh = create3DRadarShape(scenes.low, city.low, i, 'low', lowRange.min, lowRange.max);
+                cityMeshes.low.push(lowMesh);
+
+                const avgMesh = create3DRadarShape(scenes.avg, city.avg, i, 'avg', avgRange.min, avgRange.max);
+                cityMeshes.avg.push(avgMesh);
+            });
+        }
+
+        function setHoveredCity(cityIndex) {
+            hoveredCityIndex = cityIndex;
+            // Update all scenes
+            ['high', 'low', 'avg'].forEach(key => updateRingOpacity(key));
+        }
+
+        function updateRingOpacity(sceneKey) {
+            const meshes = cityMeshes[sceneKey];
+            const labels = temperatureLabels[sceneKey];
+            const hovered = hoveredCityIndex;
+
+            meshes.forEach((group, cityIndex) => {
+                const isHovered = hovered === -1 || hovered === cityIndex;
+
+                // Set target opacities on meshes
+                group.traverse((child) => {
+                    if (child.isMesh && child.material) {
+                        if (child.geometry.type === 'SphereGeometry') {
+                            child.userData.targetOpacity = isHovered ? 0.85 : 0.1;
+                        } else if (child.geometry.type === 'TubeGeometry') {
+                            child.userData.targetOpacity = isHovered ? 0.75 : 0.1;
+                        }
+                    }
+                });
+            });
+
+            // Update label target visibility based on hover
+            const labelsPerCity = 12;
+            labels.forEach((label, index) => {
+                const cityIndex = Math.floor(index / labelsPerCity);
+                const isHovered = hovered === -1 || hovered === cityIndex;
+                label.userData.targetHoverOpacity = isHovered ? 1 : 0.2;
+            });
+        }
+
+        function animateOpacities(sceneKey) {
+            const meshes = cityMeshes[sceneKey];
+            const labels = temperatureLabels[sceneKey];
+
+            // Animate mesh opacities
+            meshes.forEach((group) => {
+                group.traverse((child) => {
+                    if (child.isMesh && child.material && child.userData.targetOpacity !== undefined) {
+                        const current = child.material.opacity;
+                        const target = child.userData.targetOpacity;
+                        if (Math.abs(current - target) > 0.01) {
+                            child.material.opacity += (target - current) * FADE_SPEED;
+                        } else {
+                            child.material.opacity = target;
+                        }
+                    }
+                });
+            });
+
+            // Animate label hover opacities
+            labels.forEach((label) => {
+                if (label.userData.targetHoverOpacity === undefined) {
+                    label.userData.targetHoverOpacity = 1;
+                }
+                if (label.userData.currentHoverOpacity === undefined) {
+                    label.userData.currentHoverOpacity = 1;
+                }
+                const current = label.userData.currentHoverOpacity;
+                const target = label.userData.targetHoverOpacity;
+                if (Math.abs(current - target) > 0.01) {
+                    label.userData.currentHoverOpacity += (target - current) * FADE_SPEED;
+                } else {
+                    label.userData.currentHoverOpacity = target;
+                }
+            });
+        }
+
+        function updateLabelVisibility(sceneKey) {
+            const camera = cameras[sceneKey];
+            const labels = temperatureLabels[sceneKey];
+            if (!camera || !labels.length) return;
+
+            // Get camera direction in XZ plane (ignore Y)
+            const cameraDir = new THREE.Vector3();
+            camera.getWorldDirection(cameraDir);
+            cameraDir.y = 0;
+            cameraDir.normalize();
+
+            labels.forEach(label => {
+                // Get label position in XZ plane
+                const labelPos = label.userData.basePosition.clone();
+                labelPos.y = 0;
+                labelPos.normalize();
+
+                // Dot product: -1 = facing camera, 1 = facing away
+                const dot = labelPos.dot(cameraDir);
+
+                // Smooth gradient across the full range
+                // Map dot from [-1, 1] to opacity [1, 0] with a curve
+                // Use a power curve to keep labels more visible longer
+                const normalized = (dot + 1) / 2; // Map to [0, 1] where 0=facing, 1=away
+                const opacity = Math.pow(1 - normalized, 1.5); // Power curve for smoother falloff
+
+                // Apply hover opacity multiplier
+                const hoverOpacity = label.userData.currentHoverOpacity !== undefined ? label.userData.currentHoverOpacity : 1;
+                const finalOpacity = opacity * hoverOpacity;
+
+                // Hide completely when fully transparent to prevent occlusion
+                label.visible = finalOpacity > 0.01;
+                label.material.opacity = finalOpacity;
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            ['high', 'low', 'avg'].forEach(key => {
+                if (controls[key]) controls[key].update();
+                animateOpacities(key);
+                updateLabelVisibility(key);
+                if (renderers[key] && scenes[key] && cameras[key]) {
+                    renderers[key].render(scenes[key], cameras[key]);
+                }
+            });
+        }
+
+        function handleResize() {
+            ['high', 'low', 'avg'].forEach(key => {
+                const container = document.getElementById(`${key}ChartWrapper`);
+                if (!container || !cameras[key] || !renderers[key]) return;
+
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+
+                cameras[key].aspect = width / height;
+                cameras[key].updateProjectionMatrix();
+                renderers[key].setSize(width, height);
+            });
+        }
+
+        // API Functions
+        async function searchCities(query) {
+            if (query.length < 2) return [];
+            const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=8&language=en`;
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                return data.results || [];
+            } catch (error) {
+                console.error('Geocoding error:', error);
+                return [];
+            }
+        }
+
+        async function fetchTemperatureData(lat, lon) {
+            const endDate = new Date();
+            endDate.setDate(endDate.getDate() - 7);
+            const startDate = new Date(endDate);
+            startDate.setFullYear(startDate.getFullYear() - 10);
+
+            const formatDate = d => d.toISOString().split('T')[0];
+            const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean&timezone=auto`;
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                return calculateMonthlyAverages(data);
+            } catch (error) {
+                console.error('Weather API error:', error);
+                throw error;
+            }
+        }
+
+        function calculateMonthlyAverages(data) {
+            const monthlyData = {
+                high: Array(12).fill(null).map(() => []),
+                low: Array(12).fill(null).map(() => []),
+                avg: Array(12).fill(null).map(() => [])
+            };
+
+            const dates = data.daily.time;
+            const highs = data.daily.temperature_2m_max;
+            const lows = data.daily.temperature_2m_min;
+            const avgs = data.daily.temperature_2m_mean;
+
+            for (let i = 0; i < dates.length; i++) {
+                const month = new Date(dates[i]).getMonth();
+                if (highs[i] !== null) monthlyData.high[month].push(highs[i]);
+                if (lows[i] !== null) monthlyData.low[month].push(lows[i]);
+                if (avgs[i] !== null) monthlyData.avg[month].push(avgs[i]);
+            }
+
+            const toFahrenheit = c => Math.round((c * 9/5) + 32);
+            const average = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+
+            return {
+                high: monthlyData.high.map(arr => toFahrenheit(average(arr))),
+                low: monthlyData.low.map(arr => toFahrenheit(average(arr))),
+                avg: monthlyData.avg.map(arr => toFahrenheit(average(arr)))
+            };
+        }
+
+        function setupSearchInput(index) {
+            const input = document.getElementById(`search${index + 1}`);
+            const dropdown = document.getElementById(`dropdown${index + 1}`);
+
+            input.addEventListener('input', () => {
+                clearTimeout(searchTimeouts[index]);
+                const query = input.value.trim();
+
+                if (query.length < 2) {
+                    dropdown.classList.remove('show');
+                    return;
+                }
+
+                searchTimeouts[index] = setTimeout(async () => {
+                    const results = await searchCities(query);
+                    renderDropdown(dropdown, results, index);
+                }, 300);
+            });
+
+            input.addEventListener('focus', () => {
+                if (dropdown.children.length > 0) {
+                    dropdown.classList.add('show');
+                }
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest(`#search${index + 1}`) && !e.target.closest(`#dropdown${index + 1}`)) {
+                    dropdown.classList.remove('show');
+                }
+            });
+        }
+
+        function renderDropdown(dropdown, results, index) {
+            dropdown.innerHTML = '';
+
+            if (results.length === 0) {
+                dropdown.classList.remove('show');
+                return;
+            }
+
+            results.forEach(city => {
+                const item = document.createElement('div');
+                item.className = 'autocomplete-item';
+
+                const admin = [city.admin1, city.country].filter(Boolean).join(', ');
+                item.innerHTML = `
+                    <div class="city-name">${city.name}</div>
+                    <div class="city-details">${admin}</div>
+                `;
+
+                item.addEventListener('click', () => selectCity(city, index));
+                dropdown.appendChild(item);
+            });
+
+            dropdown.classList.add('show');
+        }
+
+        async function selectCity(city, index) {
+            const dropdown = document.getElementById(`dropdown${index + 1}`);
+            const input = document.getElementById(`search${index + 1}`);
+            const selectedDiv = document.getElementById(`selected${index + 1}`);
+            const loadingDiv = document.getElementById(`loading${index + 1}`);
+            const errorDiv = document.getElementById(`error${index + 1}`);
+
+            dropdown.classList.remove('show');
+            input.value = '';
+            errorDiv.innerHTML = '';
+
+            loadingDiv.innerHTML = `<div class="loading-indicator"><div class="spinner"></div>Loading temperature data...</div>`;
+
+            try {
+                const tempData = await fetchTemperatureData(city.latitude, city.longitude);
+
+                selectedCities[index] = {
+                    name: city.name,
+                    country: city.country,
+                    admin1: city.admin1,
+                    ...tempData
+                };
+
+                loadingDiv.innerHTML = '';
+                renderSelectedCity(index);
+                updateCharts();
+
+            } catch (error) {
+                loadingDiv.innerHTML = '';
+                errorDiv.innerHTML = `<div class="error-message">Failed to load data. Please try again.</div>`;
+            }
+        }
+
+        function renderSelectedCity(index) {
+            const selectedDiv = document.getElementById(`selected${index + 1}`);
+            const city = selectedCities[index];
+
+            if (!city) {
+                selectedDiv.innerHTML = '';
+                return;
+            }
+
+            const colorClass = index === 0 ? '' : `color-${index + 1}`;
+            const location = [city.admin1, city.country].filter(Boolean).join(', ');
+
+            selectedDiv.innerHTML = `
+                <div class="selected-city ${colorClass}">
+                    <div class="city-info">
+                        <span class="name">${city.name}</span>
+                        <span class="country">${location}</span>
+                    </div>
+                    <button class="remove-btn" onclick="removeCity(${index})">&times;</button>
+                </div>
+            `;
+        }
+
+        function removeCity(index) {
+            selectedCities[index] = null;
+            document.getElementById(`selected${index + 1}`).innerHTML = '';
+            document.getElementById(`error${index + 1}`).innerHTML = '';
+            updateCharts();
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load saved theme
+            loadTheme();
+
+            init3DScene('highChartWrapper', 'high');
+            init3DScene('lowChartWrapper', 'low');
+            init3DScene('avgChartWrapper', 'avg');
+
+            setupSearchInput(0);
+            setupSearchInput(1);
+            setupSearchInput(2);
+
+            // Chart type dropdown
+            document.getElementById('chartTypeSelect').addEventListener('change', (e) => {
+                switchChart(e.target.value);
+            });
+
+            // Theme toggle
+            document.getElementById('themeToggle').addEventListener('click', () => {
+                toggleTheme();
+                // Rebuild city meshes with new label colors
+                updateCharts();
+            });
+
+            // Unit toggle
+            document.getElementById('unitToggle').addEventListener('click', toggleUnit);
+            loadUnit();
+
+            // Legend hover interactions
+            for (let i = 0; i < 3; i++) {
+                const legendItem = document.getElementById(`legend${i + 1}`);
+                legendItem.addEventListener('mouseenter', () => setHoveredCity(i));
+                legendItem.addEventListener('mouseleave', () => setHoveredCity(-1));
+            }
+
+            window.addEventListener('resize', handleResize);
+            animate();
+        });
+    </script>
+</body>
+</html>
