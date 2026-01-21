@@ -68,6 +68,7 @@
         header {
             text-align: center;
             margin-bottom: 20px;
+            position: relative;
         }
 
         h1 {
@@ -567,6 +568,45 @@
             text-decoration: underline;
         }
 
+        .share-btn {
+            position: absolute;
+            top: 0;
+            right: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 8px 12px;
+            box-shadow: 0 2px 8px var(--shadow);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        .share-btn:hover {
+            border-color: #27ae60;
+            color: #27ae60;
+        }
+
+        .share-btn.copied {
+            background: rgba(39, 174, 96, 0.15);
+            border-color: #27ae60;
+            color: #27ae60;
+        }
+
+        .share-btn svg {
+            width: 14px;
+            height: 14px;
+            fill: currentColor;
+        }
+
         @media (max-width: 900px) {
             .main-layout {
                 flex-direction: column;
@@ -618,6 +658,10 @@
         <header>
             <h1>City Weather Explorer</h1>
             <p class="subtitle">3D comparison of monthly weather patterns</p>
+            <button class="share-btn" id="shareBtn">
+                <svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>
+                <span id="shareBtnText">Share</span>
+            </button>
         </header>
 
         <div class="main-layout">
@@ -865,6 +909,173 @@
             if (savedUnit === 'celsius') {
                 useCelsius = true;
                 updateUnitDisplay();
+            }
+        }
+
+        // URL State Management
+        function encodeStateToURL() {
+            const params = new URLSearchParams();
+
+            // Encode settings
+            params.set('dataType', dataType);
+            params.set('tempType', tempType);
+            params.set('tempMetric', tempMetric);
+            if (useCelsius) params.set('unit', 'c');
+            if (isDarkMode) params.set('theme', 'dark');
+
+            // Encode cities
+            selectedCities.forEach((city, i) => {
+                if (city) {
+                    params.set(`c${i}`, `${city.name}|${city.latitude}|${city.longitude}|${city.country || ''}|${city.admin1 || ''}`);
+                    params.set(`d${i}`, selectedDecades[i]);
+                }
+            });
+
+            return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+        }
+
+        async function decodeStateFromURL() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.size === 0) return false;
+
+            // Decode settings
+            if (params.has('dataType')) {
+                dataType = params.get('dataType');
+                document.querySelectorAll('#dataTypeToggle .toggle-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.value === dataType);
+                });
+                const tempTypeSelector = document.getElementById('tempTypeSelector');
+                tempTypeSelector.style.display = dataType === 'rainfall' ? 'none' : 'block';
+                const unitToggleContainer = document.getElementById('unitToggle').parentElement;
+                unitToggleContainer.style.display = dataType === 'rainfall' ? 'none' : 'flex';
+            }
+
+            if (params.has('tempType')) {
+                tempType = params.get('tempType');
+                document.querySelectorAll('#tempTypeToggle .toggle-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.value === tempType);
+                });
+            }
+
+            if (params.has('tempMetric')) {
+                tempMetric = params.get('tempMetric');
+                document.querySelectorAll('#tempMetricToggle .toggle-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.value === tempMetric);
+                });
+            }
+
+            if (params.get('unit') === 'c') {
+                useCelsius = true;
+                updateUnitDisplay();
+            }
+
+            if (params.get('theme') === 'dark' && !isDarkMode) {
+                toggleTheme();
+            }
+
+            // Switch to correct chart
+            updateTempTypeToggle();
+
+            // Decode and load cities
+            const citiesToLoad = [];
+            for (let i = 0; i < 3; i++) {
+                const cityParam = params.get(`c${i}`);
+                const decadeParam = params.get(`d${i}`);
+
+                if (cityParam) {
+                    const [name, lat, lon, country, admin1] = cityParam.split('|');
+                    const decade = decadeParam ? parseInt(decadeParam) : DECADES[0].value;
+
+                    // Update decade selector
+                    selectedDecades[i] = decade;
+                    const decadeSelect = document.getElementById(`decade${i + 1}`);
+                    if (decadeSelect) decadeSelect.value = decade;
+
+                    citiesToLoad.push({
+                        index: i,
+                        city: {
+                            name,
+                            latitude: parseFloat(lat),
+                            longitude: parseFloat(lon),
+                            country: country || undefined,
+                            admin1: admin1 || undefined
+                        }
+                    });
+                }
+            }
+
+            // Load cities sequentially to avoid rate limiting
+            for (const { index, city } of citiesToLoad) {
+                await loadCityFromURL(city, index);
+            }
+
+            return citiesToLoad.length > 0;
+        }
+
+        async function loadCityFromURL(city, index) {
+            const loadingDiv = document.getElementById(`loading${index + 1}`);
+            const errorDiv = document.getElementById(`error${index + 1}`);
+            const decade = selectedDecades[index];
+
+            errorDiv.innerHTML = '';
+            loadingDiv.innerHTML = `<div class="loading-indicator"><div class="spinner"></div>Loading ${city.name}...</div>`;
+
+            try {
+                const tempData = await fetchTemperatureData(city.latitude, city.longitude, decade);
+
+                selectedCities[index] = {
+                    name: city.name,
+                    country: city.country,
+                    admin1: city.admin1,
+                    latitude: city.latitude,
+                    longitude: city.longitude,
+                    decade: decade,
+                    ...tempData
+                };
+
+                loadingDiv.innerHTML = '';
+                renderSelectedCity(index);
+                updateCharts();
+            } catch (error) {
+                loadingDiv.innerHTML = '';
+                errorDiv.innerHTML = `<div class="error-message">Failed to load ${city.name}. Please try again.</div>`;
+            }
+        }
+
+        async function shareCurrentState() {
+            const url = encodeStateToURL();
+            const shareBtn = document.getElementById('shareBtn');
+            const shareBtnText = document.getElementById('shareBtnText');
+
+            try {
+                await navigator.clipboard.writeText(url);
+                shareBtn.classList.add('copied');
+                shareBtnText.textContent = 'Copied!';
+
+                // Also update URL bar without reloading
+                window.history.replaceState({}, '', url);
+
+                setTimeout(() => {
+                    shareBtn.classList.remove('copied');
+                    shareBtnText.textContent = 'Share';
+                }, 2000);
+            } catch (err) {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = url;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+
+                shareBtn.classList.add('copied');
+                shareBtnText.textContent = 'Copied!';
+                window.history.replaceState({}, '', url);
+
+                setTimeout(() => {
+                    shareBtn.classList.remove('copied');
+                    shareBtnText.textContent = 'Share';
+                }, 2000);
             }
         }
 
@@ -1867,6 +2078,9 @@
             document.getElementById('unitToggle').addEventListener('click', toggleUnit);
             loadUnit();
 
+            // Share button
+            document.getElementById('shareBtn').addEventListener('click', shareCurrentState);
+
             // Legend hover interactions
             for (let i = 0; i < 3; i++) {
                 const legendItem = document.getElementById(`legend${i + 1}`);
@@ -1876,6 +2090,9 @@
 
             window.addEventListener('resize', handleResize);
             animate();
+
+            // Load state from URL if present
+            decodeStateFromURL();
         });
     </script>
 </body>
