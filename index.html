@@ -1396,7 +1396,7 @@
         // API Functions
         async function searchCities(query) {
             if (query.length < 2) return [];
-            const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=8&language=en`;
+            const url = `https://customer-geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=8&language=en&apikey=${API_KEY}`;
             try {
                 const response = await fetch(url);
                 const data = await response.json();
@@ -1407,7 +1407,100 @@
             }
         }
 
+        // API configuration
+        const API_KEY = 'jRY0E02cPjYbgBSW';
+
+        // Cache functions
+        const CACHE_PREFIX = 'weather_cache_';
+        const CACHE_VERSION = 'v1_';
+
+        function getCacheKey(lat, lon, decade) {
+            // Round coordinates to 2 decimal places to handle minor variations
+            const roundedLat = Math.round(lat * 100) / 100;
+            const roundedLon = Math.round(lon * 100) / 100;
+            return `${CACHE_PREFIX}${CACHE_VERSION}${roundedLat}_${roundedLon}_${decade}`;
+        }
+
+        function getFromCache(lat, lon, decade) {
+            try {
+                const key = getCacheKey(lat, lon, decade);
+                const cached = localStorage.getItem(key);
+                if (cached) {
+                    return JSON.parse(cached);
+                }
+            } catch (e) {
+                console.warn('Cache read error:', e);
+            }
+            return null;
+        }
+
+        function saveToCache(lat, lon, decade, data) {
+            try {
+                const key = getCacheKey(lat, lon, decade);
+                localStorage.setItem(key, JSON.stringify(data));
+            } catch (e) {
+                console.warn('Cache write error:', e);
+                // If localStorage is full, clear old cache entries
+                if (e.name === 'QuotaExceededError') {
+                    clearOldCache();
+                }
+            }
+        }
+
+        function clearOldCache() {
+            try {
+                const keysToRemove = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.startsWith(CACHE_PREFIX)) {
+                        keysToRemove.push(key);
+                    }
+                }
+                // Remove half of cached entries
+                keysToRemove.slice(0, Math.ceil(keysToRemove.length / 2)).forEach(key => {
+                    localStorage.removeItem(key);
+                });
+            } catch (e) {
+                console.warn('Cache clear error:', e);
+            }
+        }
+
+        // Retry with exponential backoff
+        async function fetchWithRetry(url, maxRetries = 3) {
+            let lastError;
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    const response = await fetch(url);
+                    if (response.status === 429) {
+                        // Too many requests - wait and retry
+                        const waitTime = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+                        console.log(`Rate limited. Retrying in ${Math.round(waitTime / 1000)}s...`);
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
+                        continue;
+                    }
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    lastError = error;
+                    if (attempt < maxRetries - 1) {
+                        const waitTime = Math.pow(2, attempt) * 1000;
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
+                    }
+                }
+            }
+            throw lastError;
+        }
+
         async function fetchTemperatureData(lat, lon, decadeStartYear) {
+            // Check cache first
+            const cached = getFromCache(lat, lon, decadeStartYear);
+            if (cached) {
+                console.log('Using cached data for', lat, lon, decadeStartYear);
+                return cached;
+            }
+
             // Find the decade info
             const decade = DECADES.find(d => d.value === decadeStartYear) || DECADES[0];
             const currentYear = new Date().getFullYear();
@@ -1426,12 +1519,14 @@
             }
 
             const formatDate = d => d.toISOString().split('T')[0];
-            const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,apparent_temperature_max,apparent_temperature_min,apparent_temperature_mean&timezone=auto`;
+            const url = `https://customer-archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,apparent_temperature_max,apparent_temperature_min,apparent_temperature_mean&timezone=auto&apikey=${API_KEY}`;
 
             try {
-                const response = await fetch(url);
-                const data = await response.json();
-                return calculateMonthlyAverages(data);
+                const data = await fetchWithRetry(url);
+                const result = calculateMonthlyAverages(data);
+                // Save to cache
+                saveToCache(lat, lon, decadeStartYear, result);
+                return result;
             } catch (error) {
                 console.error('Weather API error:', error);
                 throw error;
