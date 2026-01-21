@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Compare average monthly temperatures between cities using interactive 3D visualizations. Explore high, low, and mean temperatures across the year.">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>">
-    <title>City Temperature Comparison - 3D</title>
+    <title>City Temperature Explorer - 3D Climate Comparison</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
@@ -583,6 +584,9 @@
                         <option value="high">Average High</option>
                         <option value="avg">Average Mean</option>
                         <option value="low">Average Low</option>
+                        <option value="feelsHigh">Feels Like High</option>
+                        <option value="feelsAvg">Feels Like Mean</option>
+                        <option value="feelsLow">Feels Like Low</option>
                     </select>
                 </div>
 
@@ -639,6 +643,21 @@
                             <div class="no-data-message" id="noDataLow">Select cities to compare</div>
                         </div>
                     </div>
+                    <div class="chart-card" id="feelsHighCard">
+                        <div class="chart-wrapper" id="feelsHighChartWrapper">
+                            <div class="no-data-message" id="noDataFeelsHigh">Select cities to compare</div>
+                        </div>
+                    </div>
+                    <div class="chart-card" id="feelsAvgCard">
+                        <div class="chart-wrapper" id="feelsAvgChartWrapper">
+                            <div class="no-data-message" id="noDataFeelsAvg">Select cities to compare</div>
+                        </div>
+                    </div>
+                    <div class="chart-card" id="feelsLowCard">
+                        <div class="chart-wrapper" id="feelsLowChartWrapper">
+                            <div class="no-data-message" id="noDataFeelsLow">Select cities to compare</div>
+                        </div>
+                    </div>
                     <div class="legend-container">
                         <div class="legend-item" id="legend1">
                             <div class="legend-color" style="background: #e67e22;"></div>
@@ -663,18 +682,26 @@
     </div>
 
     <script>
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const colors = [
+        // Constants
+        const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const COLORS = [
             { hex: 0xe67e22, css: '#e67e22' },  // Orange
             { hex: 0x27ae60, css: '#27ae60' },  // Green
             { hex: 0x9b59b6, css: '#9b59b6' }   // Purple
         ];
+        const FADE_SPEED = 0.15;
+        const BASE_RADIUS = 3.2;
+        const RADIUS_OFFSET = 0.35;
+        const MIN_HEIGHT = 1.0;
+        const MAX_HEIGHT = 5.0;
 
+        // State
         const selectedCities = [null, null, null];
         let searchTimeouts = [null, null, null];
-        let activeChart = 'high';
         let isDarkMode = false;
         let useCelsius = false;
+        let hoveredCityIndex = -1;
+        let isSyncing = false;
 
         function toggleTheme() {
             isDarkMode = !isDarkMode;
@@ -723,29 +750,23 @@
             return fahrenheit;
         }
 
-        // Three.js scenes
+        // Three.js objects
         const scenes = {};
         const cameras = {};
         const renderers = {};
         const controls = {};
-        const cityMeshes = { high: [], low: [], avg: [] };
-        const temperatureLabels = { high: [], low: [], avg: [] }; // Store label sprites for fading
-        let isSyncing = false; // Prevent infinite sync loops
-
-        // Hover interaction
-        let hoveredCityIndex = -1; // -1 means no hover, 0/1/2 = city index
-        const FADE_SPEED = 0.15; // Opacity change per frame (0-1)
+        const CHART_TYPES = ['high', 'low', 'avg', 'feelsHigh', 'feelsLow', 'feelsAvg'];
+        const cityMeshes = { high: [], low: [], avg: [], feelsHigh: [], feelsLow: [], feelsAvg: [] };
+        const temperatureLabels = { high: [], low: [], avg: [], feelsHigh: [], feelsLow: [], feelsAvg: [] };
 
         function switchChart(chartType) {
-            activeChart = chartType;
-
             // Hide all chart cards
-            document.getElementById('highCard').classList.remove('active');
-            document.getElementById('avgCard').classList.remove('active');
-            document.getElementById('lowCard').classList.remove('active');
+            CHART_TYPES.forEach(key => {
+                document.getElementById(key + 'Card').classList.remove('active');
+            });
 
             // Show selected chart card
-            document.getElementById(`${chartType}Card`).classList.add('active');
+            document.getElementById(chartType + 'Card').classList.add('active');
 
             // Trigger resize to ensure canvas fills container
             setTimeout(() => handleResize(), 10);
@@ -792,7 +813,6 @@
                 isSyncing = false;
             });
 
-
             // Soft, diffuse lighting
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
             scene.add(ambientLight);
@@ -821,11 +841,8 @@
             const sourceControls = controls[sourceKey];
             if (!sourceCamera || !sourceControls) return;
 
-            const keys = ['high', 'low', 'avg'].filter(k => k !== sourceKey);
-
-            keys.forEach(key => {
+            CHART_TYPES.filter(k => k !== sourceKey).forEach(key => {
                 if (cameras[key] && controls[key]) {
-                    // Copy camera position (maintains the same viewing angle)
                     cameras[key].position.copy(sourceCamera.position);
                     controls[key].update();
                 }
@@ -834,7 +851,7 @@
 
         function updateSceneColors() {
             // Update renderer clear color and rebuild base platforms
-            ['high', 'low', 'avg'].forEach(key => {
+            CHART_TYPES.forEach(key => {
                 if (scenes[key]) {
                     // Remove old base platform elements (wedges, lines, ring, month labels)
                     const toRemove = [];
@@ -968,7 +985,7 @@
                 ctx.font = 'bold 28px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText(months[i], 50, 25);
+                ctx.fillText(MONTHS[i], 50, 25);
 
                 const texture = new THREE.CanvasTexture(canvas);
                 const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
@@ -1019,26 +1036,18 @@
         }
 
         function create3DRadarShape(scene, data, colorIndex, sceneKey, minVal, maxVal) {
-            const color = colors[colorIndex];
+            const color = COLORS[colorIndex];
+            const radius = BASE_RADIUS + colorIndex * RADIUS_OFFSET;
+            const range = maxVal - minVal || 1;
             const points = [];
-            // Offset each city's radius so bars don't overlap
-            const baseRadius = 3.2;
-            const radiusOffset = colorIndex * 0.35;
-            const radius = baseRadius + radiusOffset;
-
-            // Normalized height: map min->max to minHeight->maxHeight
-            const minHeight = 1.0;
-            const maxHeight = 5.0;
-            const range = maxVal - minVal || 1; // avoid division by zero
 
             // Create points for the shape
             for (let i = 0; i < 12; i++) {
                 const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
                 const x = Math.sin(angle) * radius;
                 const z = Math.cos(angle) * radius;
-                // Normalize height based on min/max across all cities in this chart
                 const normalized = (data[i] - minVal) / range;
-                const y = minHeight + normalized * (maxHeight - minHeight);
+                const y = MIN_HEIGHT + normalized * (MAX_HEIGHT - MIN_HEIGHT);
                 points.push(new THREE.Vector3(x, y, z));
             }
 
@@ -1100,6 +1109,9 @@
             document.getElementById('noDataHigh').style.display = hasData ? 'none' : 'block';
             document.getElementById('noDataLow').style.display = hasData ? 'none' : 'block';
             document.getElementById('noDataAvg').style.display = hasData ? 'none' : 'block';
+            document.getElementById('noDataFeelsHigh').style.display = hasData ? 'none' : 'block';
+            document.getElementById('noDataFeelsLow').style.display = hasData ? 'none' : 'block';
+            document.getElementById('noDataFeelsAvg').style.display = hasData ? 'none' : 'block';
 
             // Update legend
             for (let i = 0; i < 3; i++) {
@@ -1114,7 +1126,7 @@
             }
 
             // Clear existing meshes
-            ['high', 'low', 'avg'].forEach(key => clearCityMeshes(key));
+            CHART_TYPES.forEach(key => clearCityMeshes(key));
 
             // Calculate min/max for each chart type across all selected cities
             const getMinMax = (key) => {
@@ -1125,29 +1137,25 @@
                 };
             };
 
-            const highRange = activeCities.length ? getMinMax('high') : { min: 0, max: 100 };
-            const lowRange = activeCities.length ? getMinMax('low') : { min: 0, max: 100 };
-            const avgRange = activeCities.length ? getMinMax('avg') : { min: 0, max: 100 };
+            const ranges = {};
+            CHART_TYPES.forEach(key => {
+                ranges[key] = activeCities.length ? getMinMax(key) : { min: 0, max: 100 };
+            });
 
             // Add new city data with normalized heights
             selectedCities.forEach((city, i) => {
                 if (!city) return;
 
-                const highMesh = create3DRadarShape(scenes.high, city.high, i, 'high', highRange.min, highRange.max);
-                cityMeshes.high.push(highMesh);
-
-                const lowMesh = create3DRadarShape(scenes.low, city.low, i, 'low', lowRange.min, lowRange.max);
-                cityMeshes.low.push(lowMesh);
-
-                const avgMesh = create3DRadarShape(scenes.avg, city.avg, i, 'avg', avgRange.min, avgRange.max);
-                cityMeshes.avg.push(avgMesh);
+                CHART_TYPES.forEach(key => {
+                    const mesh = create3DRadarShape(scenes[key], city[key], i, key, ranges[key].min, ranges[key].max);
+                    cityMeshes[key].push(mesh);
+                });
             });
         }
 
         function setHoveredCity(cityIndex) {
             hoveredCityIndex = cityIndex;
-            // Update all scenes
-            ['high', 'low', 'avg'].forEach(key => updateRingOpacity(key));
+            CHART_TYPES.forEach(key => updateRingOpacity(key));
         }
 
         function updateRingOpacity(sceneKey) {
@@ -1255,7 +1263,7 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            ['high', 'low', 'avg'].forEach(key => {
+            CHART_TYPES.forEach(key => {
                 if (controls[key]) controls[key].update();
                 animateOpacities(key);
                 updateLabelVisibility(key);
@@ -1266,8 +1274,9 @@
         }
 
         function handleResize() {
-            ['high', 'low', 'avg'].forEach(key => {
-                const container = document.getElementById(`${key}ChartWrapper`);
+            CHART_TYPES.forEach(key => {
+                const wrapperId = key + 'ChartWrapper';
+                const container = document.getElementById(wrapperId);
                 if (!container || !cameras[key] || !renderers[key]) return;
 
                 const width = container.clientWidth;
@@ -1300,7 +1309,7 @@
             startDate.setFullYear(startDate.getFullYear() - 10);
 
             const formatDate = d => d.toISOString().split('T')[0];
-            const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean&timezone=auto`;
+            const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,apparent_temperature_max,apparent_temperature_min,apparent_temperature_mean&timezone=auto`;
 
             try {
                 const response = await fetch(url);
@@ -1316,19 +1325,28 @@
             const monthlyData = {
                 high: Array(12).fill(null).map(() => []),
                 low: Array(12).fill(null).map(() => []),
-                avg: Array(12).fill(null).map(() => [])
+                avg: Array(12).fill(null).map(() => []),
+                feelsHigh: Array(12).fill(null).map(() => []),
+                feelsLow: Array(12).fill(null).map(() => []),
+                feelsAvg: Array(12).fill(null).map(() => [])
             };
 
             const dates = data.daily.time;
             const highs = data.daily.temperature_2m_max;
             const lows = data.daily.temperature_2m_min;
             const avgs = data.daily.temperature_2m_mean;
+            const feelsHighs = data.daily.apparent_temperature_max;
+            const feelsLows = data.daily.apparent_temperature_min;
+            const feelsAvgs = data.daily.apparent_temperature_mean;
 
             for (let i = 0; i < dates.length; i++) {
                 const month = new Date(dates[i]).getMonth();
                 if (highs[i] !== null) monthlyData.high[month].push(highs[i]);
                 if (lows[i] !== null) monthlyData.low[month].push(lows[i]);
                 if (avgs[i] !== null) monthlyData.avg[month].push(avgs[i]);
+                if (feelsHighs[i] !== null) monthlyData.feelsHigh[month].push(feelsHighs[i]);
+                if (feelsLows[i] !== null) monthlyData.feelsLow[month].push(feelsLows[i]);
+                if (feelsAvgs[i] !== null) monthlyData.feelsAvg[month].push(feelsAvgs[i]);
             }
 
             const toFahrenheit = c => Math.round((c * 9/5) + 32);
@@ -1337,7 +1355,10 @@
             return {
                 high: monthlyData.high.map(arr => toFahrenheit(average(arr))),
                 low: monthlyData.low.map(arr => toFahrenheit(average(arr))),
-                avg: monthlyData.avg.map(arr => toFahrenheit(average(arr)))
+                avg: monthlyData.avg.map(arr => toFahrenheit(average(arr))),
+                feelsHigh: monthlyData.feelsHigh.map(arr => toFahrenheit(average(arr))),
+                feelsLow: monthlyData.feelsLow.map(arr => toFahrenheit(average(arr))),
+                feelsAvg: monthlyData.feelsAvg.map(arr => toFahrenheit(average(arr)))
             };
         }
 
@@ -1466,9 +1487,10 @@
             // Load saved theme
             loadTheme();
 
-            init3DScene('highChartWrapper', 'high');
-            init3DScene('lowChartWrapper', 'low');
-            init3DScene('avgChartWrapper', 'avg');
+            // Initialize all chart scenes
+            CHART_TYPES.forEach(key => {
+                init3DScene(key + 'ChartWrapper', key);
+            });
 
             setupSearchInput(0);
             setupSearchInput(1);
