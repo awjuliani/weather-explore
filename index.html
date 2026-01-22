@@ -914,6 +914,7 @@
             updateUnitDisplay();
             // Rebuild charts with new unit
             updateCharts();
+            updateBrowserURL();
         }
 
         function loadUnit() {
@@ -944,6 +945,11 @@
             });
 
             return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+        }
+
+        function updateBrowserURL() {
+            const url = encodeStateToURL();
+            window.history.replaceState({}, '', url);
         }
 
         async function decodeStateFromURL() {
@@ -1945,6 +1951,7 @@
                 loadingDiv.innerHTML = '';
                 renderSelectedCity(index);
                 updateCharts();
+                updateBrowserURL();
 
             } catch (error) {
                 loadingDiv.innerHTML = '';
@@ -1978,6 +1985,7 @@
                     loadingDiv.innerHTML = '';
                     renderSelectedCity(index);
                     updateCharts();
+                    updateBrowserURL();
 
                 } catch (error) {
                     loadingDiv.innerHTML = '';
@@ -2015,6 +2023,7 @@
             document.getElementById(`selected${index + 1}`).innerHTML = '';
             document.getElementById(`error${index + 1}`).innerHTML = '';
             updateCharts();
+            updateBrowserURL();
         }
 
         // Initialize
@@ -2066,6 +2075,7 @@
 
                     // Switch to appropriate chart
                     updateTempTypeToggle();
+                    updateBrowserURL();
                 });
             });
 
@@ -2076,6 +2086,7 @@
                     btn.classList.add('active');
                     tempType = btn.dataset.value;
                     updateTempTypeToggle();
+                    updateBrowserURL();
                 });
             });
 
@@ -2085,6 +2096,7 @@
                     btn.classList.add('active');
                     tempMetric = btn.dataset.value;
                     updateTempTypeToggle();
+                    updateBrowserURL();
                 });
             });
 
@@ -2093,6 +2105,7 @@
                 toggleTheme();
                 // Rebuild city meshes with new label colors
                 updateCharts();
+                updateBrowserURL();
             });
 
             // Unit toggle
