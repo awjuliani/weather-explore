@@ -676,6 +676,12 @@
                         <div class="toggle-switch" id="unitToggle"></div>
                     </div>
                 </div>
+                <div class="toggle-row">
+                    <div class="theme-toggle">
+                        <span>Season Shift</span>
+                        <div class="toggle-switch" id="seasonToggle"></div>
+                    </div>
+                </div>
 
                 <div class="chart-type-selector">
                     <label>Data Type</label>
@@ -808,7 +814,7 @@
         </div>
 
         <footer>
-            <p>Data from <a href="https://open-meteo.com/" target="_blank">Open-Meteo API</a> | Heights represent <span id="footerUnit">°F</span></p>
+            <p>Data from <a href="https://open-meteo.com/" target="_blank">Open-Meteo API</a> | Heights represent <span id="footerUnit">°F</span><span id="footerSeason"></span></p>
         </footer>
     </div>
 
@@ -853,6 +859,7 @@
         let tempType = 'actual'; // 'actual' or 'feels'
         let tempMetric = 'high'; // 'high', 'avg', or 'low'
         let dataType = 'temperature'; // 'temperature' or 'rainfall'
+        let alignSeasons = false;
 
         // Get chart type key from current selections
         function getChartTypeKey() {
@@ -925,6 +932,46 @@
             }
         }
 
+        function updateSeasonAlignmentDisplay() {
+            const toggle = document.getElementById('seasonToggle');
+            if (toggle) toggle.classList.toggle('active', alignSeasons);
+            const footerSeason = document.getElementById('footerSeason');
+            if (footerSeason) {
+                footerSeason.textContent = alignSeasons ? ' | Season-shifted' : '';
+            }
+        }
+
+        function toggleSeasonAlignment() {
+            alignSeasons = !alignSeasons;
+            localStorage.setItem('seasonAlign', alignSeasons ? 'on' : 'off');
+            updateSeasonAlignmentDisplay();
+            updateCharts();
+            updateBrowserURL();
+        }
+
+        function loadSeasonAlignment() {
+            const saved = localStorage.getItem('seasonAlign');
+            if (saved === 'on') {
+                alignSeasons = true;
+                updateSeasonAlignmentDisplay();
+            }
+        }
+
+        function shiftMonthlyData(data, offset) {
+            const shifted = new Array(12);
+            for (let i = 0; i < 12; i++) {
+                shifted[i] = data[(i + offset) % 12];
+            }
+            return shifted;
+        }
+
+        function getAlignedMonthlyData(city, key) {
+            const data = city[key];
+            if (!alignSeasons || !Array.isArray(data)) return data;
+            if (city.latitude >= 0) return data;
+            return shiftMonthlyData(data, 6);
+        }
+
         // URL State Management
         function encodeStateToURL() {
             const params = new URLSearchParams();
@@ -935,6 +982,7 @@
             params.set('tempMetric', tempMetric);
             if (useCelsius) params.set('unit', 'c');
             if (isDarkMode) params.set('theme', 'dark');
+            if (alignSeasons) params.set('align', '1');
 
             // Encode cities
             selectedCities.forEach((city, i) => {
@@ -989,6 +1037,11 @@
 
             if (params.get('theme') === 'dark' && !isDarkMode) {
                 toggleTheme();
+            }
+
+            if (params.get('align') === '1') {
+                alignSeasons = true;
+                updateSeasonAlignmentDisplay();
             }
 
             // Switch to correct chart
@@ -1499,7 +1552,7 @@
 
             // Calculate min/max for each chart type across all selected cities
             const getMinMax = (key) => {
-                const allValues = activeCities.flatMap(city => city[key]);
+                const allValues = activeCities.flatMap(city => getAlignedMonthlyData(city, key));
                 return {
                     min: Math.min(...allValues),
                     max: Math.max(...allValues)
@@ -1516,7 +1569,8 @@
                 if (!city) return;
 
                 CHART_TYPES.forEach(key => {
-                    const mesh = create3DRadarShape(scenes[key], city[key], i, key, ranges[key].min, ranges[key].max);
+                    const alignedData = getAlignedMonthlyData(city, key);
+                    const mesh = create3DRadarShape(scenes[key], alignedData, i, key, ranges[key].min, ranges[key].max);
                     cityMeshes[key].push(mesh);
                 });
             });
@@ -2111,6 +2165,10 @@
             // Unit toggle
             document.getElementById('unitToggle').addEventListener('click', toggleUnit);
             loadUnit();
+
+            // Hemisphere alignment toggle
+            document.getElementById('seasonToggle').addEventListener('click', toggleSeasonAlignment);
+            loadSeasonAlignment();
 
             // Share button
             document.getElementById('shareBtn').addEventListener('click', shareCurrentState);
