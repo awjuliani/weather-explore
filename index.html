@@ -215,6 +215,57 @@
             vertical-align: middle;
         }
 
+        .api-key-section {
+            margin-bottom: 10px;
+        }
+
+        .api-key-section label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+        }
+
+        .api-key-input {
+            width: 100%;
+            background: var(--input-bg);
+            border: 1px solid var(--border-light);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-family: monospace;
+            transition: all 0.3s ease;
+        }
+
+        .api-key-input:focus {
+            outline: none;
+            border-color: #27ae60;
+            box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.15);
+        }
+
+        .api-key-input::placeholder {
+            color: var(--text-muted);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .api-key-hint {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .api-key-hint a {
+            color: #27ae60;
+            text-decoration: none;
+        }
+
+        .api-key-hint a:hover {
+            text-decoration: underline;
+        }
+
         .search-container {
             position: relative;
         }
@@ -798,6 +849,12 @@
                             <span class="unit-label">°C</span>
                         </div>
                     </div>
+                </div>
+
+                <div class="api-key-section">
+                    <label>API Key</label>
+                    <input type="password" class="api-key-input" id="apiKeyInput" placeholder="Enter Open-Meteo API key" autocomplete="off">
+                    <p class="api-key-hint">Get a key at <a href="https://open-meteo.com/en/pricing" target="_blank" rel="noopener">open-meteo.com</a></p>
                 </div>
 
                 <div class="controls">
@@ -1820,7 +1877,7 @@
         // API Functions
         async function searchCities(query) {
             if (query.length < 2) return [];
-            const url = `https://customer-geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=8&language=en&apikey=${API_KEY}`;
+            const url = `${getApiBase('geocoding-api')}/v1/search?name=${encodeURIComponent(query)}&count=8&language=en${apiKeyParam()}`;
             try {
                 const response = await fetch(url);
                 const data = await response.json();
@@ -1832,7 +1889,20 @@
         }
 
         // API configuration
-        const API_KEY = 'jRY0E02cPjYbgBSW';
+        function getApiKey() {
+            return localStorage.getItem('openmeteo_api_key') || '';
+        }
+        function getApiBase(service) {
+            const key = getApiKey();
+            if (key) {
+                return `https://customer-${service}.open-meteo.com`;
+            }
+            return `https://${service}.open-meteo.com`;
+        }
+        function apiKeyParam() {
+            const key = getApiKey();
+            return key ? `&apikey=${key}` : '';
+        }
 
         // Cache functions
         const CACHE_PREFIX = 'weather_cache_';
@@ -1941,7 +2011,7 @@
             }
 
             const formatDate = d => d.toISOString().split('T')[0];
-            const url = `https://customer-archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,apparent_temperature_max,apparent_temperature_min,apparent_temperature_mean,precipitation_sum,sunshine_duration&timezone=auto&apikey=${API_KEY}`;
+            const url = `${getApiBase('archive-api')}/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,apparent_temperature_max,apparent_temperature_min,apparent_temperature_mean,precipitation_sum,sunshine_duration&timezone=auto${apiKeyParam()}`;
 
             try {
                 const data = await fetchWithRetry(url);
@@ -2268,6 +2338,21 @@
             // Unit toggle
             document.getElementById('unitToggle').addEventListener('click', toggleUnit);
             loadUnit();
+
+            // API key input
+            const apiKeyInput = document.getElementById('apiKeyInput');
+            const savedKey = localStorage.getItem('openmeteo_api_key');
+            if (savedKey) {
+                apiKeyInput.value = savedKey;
+            }
+            apiKeyInput.addEventListener('change', () => {
+                const key = apiKeyInput.value.trim();
+                if (key) {
+                    localStorage.setItem('openmeteo_api_key', key);
+                } else {
+                    localStorage.removeItem('openmeteo_api_key');
+                }
+            });
 
             // Share button
             document.getElementById('shareBtn').addEventListener('click', shareCurrentState);
