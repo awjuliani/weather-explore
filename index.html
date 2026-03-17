@@ -1820,7 +1820,7 @@
         // API Functions
         async function searchCities(query) {
             if (query.length < 2) return [];
-            const url = `https://customer-geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=8&language=en&apikey=${API_KEY}`;
+            const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=8&language=en`;
             try {
                 const response = await fetch(url);
                 const data = await response.json();
@@ -1832,8 +1832,7 @@
         }
 
         // API configuration
-        const API_KEY = 'jRY0E02cPjYbgBSW';
-
+        
         // Cache functions
         const CACHE_PREFIX = 'weather_cache_';
         const CACHE_VERSION = 'v4_'; // Updated to v4 for sunlight hours
@@ -1941,7 +1940,7 @@
             }
 
             const formatDate = d => d.toISOString().split('T')[0];
-            const url = `https://customer-archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,apparent_temperature_max,apparent_temperature_min,apparent_temperature_mean,precipitation_sum,sunshine_duration&timezone=auto&apikey=${API_KEY}`;
+            const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,apparent_temperature_max,apparent_temperature_min,apparent_temperature_mean,precipitation_sum,sunshine_duration&timezone=auto`;
 
             try {
                 const data = await fetchWithRetry(url);
